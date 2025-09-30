@@ -13,6 +13,7 @@ import {
   MenuUnfoldOutlined,
   LogoutOutlined,
   SettingOutlined,
+  ProjectOutlined,
 } from '@ant-design/icons';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -68,6 +69,11 @@ export const MainLayout = () => {
       key: '/gantt',
       icon: <CalendarOutlined />,
       label: <Link to="/gantt">Gantt Chart</Link>,
+    },
+    {
+      key: '/kanban',
+      icon: <ProjectOutlined />,
+      label: <Link to="/kanban">Kanban Board</Link>,
     },
     {
       key: '/analytics',

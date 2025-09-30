@@ -13,6 +13,7 @@ import Tasks from "./pages/Tasks";
 import TaskDetail from "./pages/TaskDetail";
 import CreateTask from "./pages/CreateTask";
 import GanttChart from "./pages/GanttChart";
+import Kanban from "./pages/Kanban";
 import Analytics from "./pages/Analytics";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -77,6 +78,7 @@ const App = () => {
                 <Route path="tasks/create" element={<CreateTask />} />
                 <Route path="tasks/:id" element={<TaskDetail />} />
                 <Route path="gantt" element={<GanttChart />} />
+                <Route path="kanban" element={<Kanban />} />
                 <Route path="analytics" element={<Analytics />} />
                 <Route path="team" element={<div className="p-6"><h1 className="text-3xl font-bold">Team Management</h1><p className="text-muted-foreground mt-2">Team management coming soon...</p></div>} />
               </Route>
