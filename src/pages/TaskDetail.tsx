@@ -63,7 +63,7 @@ export default function TaskDetail() {
           created_by_user:users!tasks_created_by_fkey(full_name, avatar_url),
           task_assignments(
             user_id,
-            users(full_name, avatar_url, role)
+            users!task_assignments_user_id_fkey(full_name, avatar_url, role)
           )
         `)
         .eq('id', id)
