@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   Card,
@@ -6,103 +6,241 @@ import {
   Tag,
   Button,
   Progress,
-  Timeline,
   Checkbox,
   Input,
   Avatar,
   List,
-  Upload,
-  Select,
   Space,
   Divider,
+  Spin,
 } from 'antd';
 import {
   ArrowLeftOutlined,
-  EditOutlined,
   ClockCircleOutlined,
   UserOutlined,
   SendOutlined,
   PaperClipOutlined,
-  UploadOutlined,
-  CheckCircleOutlined,
   DownloadOutlined,
 } from '@ant-design/icons';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import dayjs from 'dayjs';
+import relativeTime from 'dayjs/plugin/relativeTime';
+
+dayjs.extend(relativeTime);
 
 const { TextArea } = Input;
-const { Option } = Select;
 
 export default function TaskDetail() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { userProfile } = useAuth();
+  const { toast } = useToast();
+  
+  const [task, setTask] = useState<any>(null);
+  const [subtasks, setSubtasks] = useState<any[]>([]);
+  const [comments, setComments] = useState<any[]>([]);
+  const [attachments, setAttachments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [comment, setComment] = useState('');
-  const [status, setStatus] = useState('in_progress');
+  const [isAssigned, setIsAssigned] = useState(false);
 
-  const task = {
-    id: 'TSK-001',
-    title: 'GST Return - Client ABC Ltd',
-    description: 'Complete monthly GST return filing for December 2024. Ensure all invoices are collected and input tax credit is verified before filing.',
-    status: 'in_progress',
-    priority: 'high',
-    assignee: 'David Employee',
-    assigneeAvatar: <UserOutlined />,
-    team: 'Tax Compliance Team',
-    createdBy: 'Sarah Manager',
-    createdAt: '2025-09-28',
-    dueDate: dayjs().add(2, 'day').format('YYYY-MM-DD'),
-    estimatedHours: 8,
-    actualHours: 3,
-    progress: 40,
+  useEffect(() => {
+    if (id) {
+      fetchTaskDetails();
+    }
+  }, [id]);
+
+  const fetchTaskDetails = async () => {
+    setLoading(true);
+    try {
+      // Fetch task
+      const { data: taskData, error: taskError } = await supabase
+        .from('tasks')
+        .select(`
+          *,
+          created_by_user:users!tasks_created_by_fkey(full_name, avatar_url),
+          task_assignments(
+            user_id,
+            users(full_name, avatar_url, role)
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (taskError) throw taskError;
+      setTask(taskData);
+
+      // Check if current user is assigned
+      const assigned = taskData.task_assignments?.some(
+        (a: any) => a.user_id === userProfile?.id
+      );
+      setIsAssigned(assigned);
+
+      // Fetch subtasks
+      const { data: subtasksData } = await supabase
+        .from('subtasks')
+        .select(`
+          *,
+          completed_by_user:users!subtasks_completed_by_fkey(full_name)
+        `)
+        .eq('task_id', id)
+        .order('sort_order', { ascending: true });
+      setSubtasks(subtasksData || []);
+
+      // Fetch comments
+      const { data: commentsData } = await supabase
+        .from('comments')
+        .select(`
+          *,
+          user:users(full_name, avatar_url, role)
+        `)
+        .eq('task_id', id)
+        .order('created_at', { ascending: false });
+      setComments(commentsData || []);
+
+      // Fetch attachments
+      const { data: attachmentsData } = await supabase
+        .from('attachments')
+        .select(`
+          *,
+          uploaded_by_user:users!attachments_uploaded_by_fkey(full_name)
+        `)
+        .eq('task_id', id)
+        .order('uploaded_at', { ascending: false });
+      setAttachments(attachmentsData || []);
+    } catch (error) {
+      console.error('Error fetching task details:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load task details',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const subtasks = [
-    { id: 1, title: 'Collect sales invoices', isDone: true, completedBy: 'David Employee', completedAt: '2025-09-29' },
-    { id: 2, title: 'Verify input tax credit', isDone: false },
-    { id: 3, title: 'File online return', isDone: false },
-  ];
+  const handleSubtaskToggle = async (subtaskId: string, isDone: boolean) => {
+    if (!isAssigned) {
+      toast({
+        title: 'Not Authorized',
+        description: 'Only assigned users can mark subtasks',
+        variant: 'destructive',
+      });
+      return;
+    }
 
-  const comments = [
-    {
-      id: 1,
-      user: 'David Employee',
-      avatar: <UserOutlined />,
-      content: 'Started working on sales invoice collection. Found 23 invoices so far.',
-      timestamp: '2 hours ago',
-    },
-    {
-      id: 2,
-      user: 'Sarah Manager',
-      avatar: <UserOutlined />,
-      content: 'Great progress! Please ensure all invoices are cross-verified with the ledger.',
-      timestamp: '1 hour ago',
-    },
-  ];
+    try {
+      const { error } = await supabase
+        .from('subtasks')
+        .update({
+          is_done: !isDone,
+          completed_by: !isDone ? userProfile?.id : null,
+          completed_at: !isDone ? new Date().toISOString() : null,
+        })
+        .eq('id', subtaskId);
 
-  const attachments = [
-    { id: 1, name: 'Invoice_List.xlsx', size: '245 KB', uploadedBy: 'David Employee', uploadedAt: '2025-09-29' },
-    { id: 2, name: 'Sales_Register.pdf', size: '1.2 MB', uploadedBy: 'David Employee', uploadedAt: '2025-09-29' },
-  ];
+      if (error) throw error;
 
-  const history = [
-    {
-      action: 'Status changed to In Progress',
-      user: 'David Employee',
-      timestamp: '3 hours ago',
-      color: 'blue',
-    },
-    {
-      action: 'Task assigned to David Employee',
-      user: 'Sarah Manager',
-      timestamp: '5 hours ago',
-      color: 'green',
-    },
-    {
-      action: 'Task created',
-      user: 'Sarah Manager',
-      timestamp: '6 hours ago',
-      color: 'gray',
-    },
-  ];
+      toast({
+        title: 'Success',
+        description: `Subtask ${!isDone ? 'completed' : 'reopened'}`,
+      });
+
+      fetchTaskDetails();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleSendComment = async () => {
+    if (!comment.trim()) return;
+
+    if (userProfile?.role === 'admin') {
+      toast({
+        title: 'Not Allowed',
+        description: 'Admins cannot add comments',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .insert([{
+          task_id: id,
+          user_id: userProfile?.id,
+          content: comment,
+        }]);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Success',
+        description: 'Comment added',
+      });
+
+      setComment('');
+      fetchTaskDetails();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDownloadAttachment = async (filePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('task-attachments')
+        .download(filePath);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: 'Failed to download file',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <Spin size="large" />
+      </div>
+    );
+  }
+
+  if (!task) {
+    return (
+      <div className="text-center p-12">
+        <h2 className="text-2xl font-bold">Task not found</h2>
+        <Button onClick={() => navigate('/tasks')} className="mt-4">
+          Back to Tasks
+        </Button>
+      </div>
+    );
+  }
 
   const statusColors: { [key: string]: string } = {
     not_started: 'default',
@@ -112,6 +250,7 @@ export default function TaskDetail() {
     review: 'warning',
     completed: 'success',
     delivered: 'purple',
+    rejected: 'error',
   };
 
   const priorityColors: { [key: string]: string } = {
@@ -121,17 +260,9 @@ export default function TaskDetail() {
     low: 'default',
   };
 
-  const handleSendComment = () => {
-    if (comment.trim()) {
-      console.log('Sending comment:', comment);
-      setComment('');
-    }
-  };
-
-  const handleStatusChange = (newStatus: string) => {
-    setStatus(newStatus);
-    console.log('Changing status to:', newStatus);
-  };
+  const progress = subtasks.length > 0
+    ? Math.round((subtasks.filter((s) => s.is_done).length / subtasks.length) * 100)
+    : 0;
 
   return (
     <div className="space-y-6">
@@ -146,174 +277,169 @@ export default function TaskDetail() {
           <div>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground">{task.title}</h1>
-              <Tag color={priorityColors[task.priority]}>{task.priority.toUpperCase()}</Tag>
+              <Tag color={priorityColors[task.priority]}>{task.priority?.toUpperCase()}</Tag>
+              <Tag color={statusColors[task.status]}>{task.status?.replace('_', ' ').toUpperCase()}</Tag>
             </div>
-            <p className="text-muted-foreground text-sm mt-1">{task.id}</p>
           </div>
         </div>
-        <Button
-          type="primary"
-          icon={<EditOutlined />}
-          className="bg-accent hover:bg-accent-hover border-none"
-        >
-          Edit Task
-        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
-          <Card title="Task Details" className="border-border">
-            <div className="mb-6">
-              <h3 className="font-medium mb-2">Description</h3>
-              <p className="text-muted-foreground">{task.description}</p>
-            </div>
-
-            <Divider />
-
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">Status</div>
-                <Select
-                  value={status}
-                  onChange={handleStatusChange}
-                  className="w-full"
-                >
-                  <Option value="not_started">Not Started</Option>
-                  <Option value="assigned">Assigned</Option>
-                  <Option value="in_progress">In Progress</Option>
-                  <Option value="pending">Pending</Option>
-                  <Option value="review">Review</Option>
-                  <Option value="completed">Completed</Option>
-                </Select>
-              </div>
-              <div>
-                <div className="text-sm text-muted-foreground mb-1">Progress</div>
-                <Progress percent={task.progress} strokeColor="hsl(var(--accent))" />
-              </div>
-            </div>
-
-            <Descriptions column={2} bordered size="small">
-              <Descriptions.Item label="Assignee" span={1}>
+          <Card title="Task Details">
+            <Descriptions bordered column={2}>
+              <Descriptions.Item label="Created By" span={2}>
                 <Space>
-                  <Avatar size="small" icon={task.assigneeAvatar} className="bg-accent" />
-                  {task.assignee}
+                  <Avatar src={task.created_by_user?.avatar_url} icon={<UserOutlined />} />
+                  {task.created_by_user?.full_name || 'Unknown'}
                 </Space>
               </Descriptions.Item>
-              <Descriptions.Item label="Team" span={1}>{task.team}</Descriptions.Item>
-              <Descriptions.Item label="Created By" span={1}>{task.createdBy}</Descriptions.Item>
-              <Descriptions.Item label="Created Date" span={1}>{task.createdAt}</Descriptions.Item>
-              <Descriptions.Item label="Due Date" span={1}>
-                <span className="text-warning font-medium">{task.dueDate}</span>
+              <Descriptions.Item label="Created At">
+                {dayjs(task.created_at).format('MMM DD, YYYY')}
               </Descriptions.Item>
-              <Descriptions.Item label="Estimated Hours" span={1}>{task.estimatedHours}h</Descriptions.Item>
-              <Descriptions.Item label="Actual Hours" span={2}>{task.actualHours}h / {task.estimatedHours}h</Descriptions.Item>
+              <Descriptions.Item label="Due Date">
+                {task.due_date ? dayjs(task.due_date).format('MMM DD, YYYY') : '-'}
+              </Descriptions.Item>
+              <Descriptions.Item label="Estimated Hours">
+                <ClockCircleOutlined /> {task.estimated_hours || 0} hours
+              </Descriptions.Item>
+              <Descriptions.Item label="Actual Hours">
+                <ClockCircleOutlined /> {task.actual_hours || 0} hours
+              </Descriptions.Item>
+              <Descriptions.Item label="Description" span={2}>
+                {task.description || 'No description'}
+              </Descriptions.Item>
             </Descriptions>
           </Card>
 
-          <Card title="Subtasks" extra={<span className="text-sm text-muted-foreground">2 of 3 completed</span>} className="border-border">
-            <div className="space-y-3">
+          <Card title="Subtasks" extra={<Progress percent={progress} size="small" style={{ width: 200 }} />}>
+            <Space direction="vertical" className="w-full">
               {subtasks.map((subtask) => (
-                <div key={subtask.id} className="flex items-start gap-3 p-3 rounded-lg hover:bg-muted/50 transition-colors">
-                  <Checkbox checked={subtask.isDone} />
+                <div key={subtask.id} className="flex items-start gap-3 p-3 hover:bg-muted/50 rounded">
+                  <Checkbox
+                    checked={subtask.is_done}
+                    onChange={() => handleSubtaskToggle(subtask.id, subtask.is_done)}
+                    disabled={!isAssigned}
+                  />
                   <div className="flex-1">
-                    <div className={`font-medium ${subtask.isDone ? 'line-through text-muted-foreground' : ''}`}>
+                    <div className={subtask.is_done ? 'line-through text-muted-foreground' : ''}>
                       {subtask.title}
                     </div>
-                    {subtask.isDone && subtask.completedBy && (
+                    {subtask.description && (
+                      <div className="text-sm text-muted-foreground mt-1">{subtask.description}</div>
+                    )}
+                    {subtask.is_done && (
                       <div className="text-xs text-muted-foreground mt-1">
-                        Completed by {subtask.completedBy} on {subtask.completedAt}
+                        Completed by {subtask.completed_by_user?.full_name} on{' '}
+                        {dayjs(subtask.completed_at).format('MMM DD, YYYY')}
                       </div>
                     )}
                   </div>
-                  {subtask.isDone && <CheckCircleOutlined className="text-success" />}
                 </div>
               ))}
-            </div>
+              {subtasks.length === 0 && (
+                <div className="text-center text-muted-foreground py-4">No subtasks</div>
+              )}
+            </Space>
           </Card>
 
-          <Card title="Comments" className="border-border">
+          <Card title="Comments">
+            <Space direction="vertical" className="w-full">
+              <List
+                dataSource={comments}
+                locale={{ emptyText: 'No comments yet' }}
+                renderItem={(item: any) => (
+                  <List.Item>
+                    <List.Item.Meta
+                      avatar={<Avatar src={item.user?.avatar_url} icon={<UserOutlined />} />}
+                      title={
+                        <Space>
+                          <span>{item.user?.full_name}</span>
+                          <Tag>{item.user?.role}</Tag>
+                          <span className="text-xs text-muted-foreground">
+                            {dayjs(item.created_at).fromNow()}
+                          </span>
+                        </Space>
+                      }
+                      description={item.content}
+                    />
+                  </List.Item>
+                )}
+              />
+              
+              {userProfile?.role !== 'admin' && (
+                <>
+                  <Divider />
+                  <Space.Compact className="w-full">
+                    <TextArea
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                      placeholder="Add a comment..."
+                      autoSize={{ minRows: 2, maxRows: 6 }}
+                    />
+                    <Button
+                      type="primary"
+                      icon={<SendOutlined />}
+                      onClick={handleSendComment}
+                      disabled={!comment.trim()}
+                    >
+                      Send
+                    </Button>
+                  </Space.Compact>
+                </>
+              )}
+            </Space>
+          </Card>
+        </div>
+
+        <div className="space-y-6">
+          <Card title="Assigned To">
+            <Space direction="vertical" className="w-full">
+              {task.task_assignments?.map((assignment: any, index: number) => (
+                <div key={index} className="flex items-center gap-3">
+                  <Avatar src={assignment.users?.avatar_url} icon={<UserOutlined />} />
+                  <div>
+                    <div className="font-medium">{assignment.users?.full_name}</div>
+                    <div className="text-xs text-muted-foreground">{assignment.users?.role}</div>
+                  </div>
+                </div>
+              ))}
+              {task.task_assignments?.length === 0 && (
+                <div className="text-center text-muted-foreground">Unassigned</div>
+              )}
+            </Space>
+          </Card>
+
+          <Card title={<><PaperClipOutlined /> Attachments</>}>
             <List
-              dataSource={comments}
-              renderItem={(comment) => (
-                <List.Item className="border-0">
+              dataSource={attachments}
+              locale={{ emptyText: 'No attachments' }}
+              renderItem={(item: any) => (
+                <List.Item
+                  actions={[
+                    <Button
+                      icon={<DownloadOutlined />}
+                      size="small"
+                      onClick={() => handleDownloadAttachment(item.file_path, item.file_name)}
+                    >
+                      Download
+                    </Button>,
+                  ]}
+                >
                   <List.Item.Meta
-                    avatar={<Avatar icon={comment.avatar} className="bg-primary" />}
-                    title={<span className="font-medium">{comment.user}</span>}
+                    title={item.file_name}
                     description={
-                      <div>
-                        <p className="text-foreground mb-1">{comment.content}</p>
-                        <span className="text-xs text-muted-foreground">{comment.timestamp}</span>
+                      <div className="text-xs">
+                        <div>{(item.file_size / 1024).toFixed(2)} KB</div>
+                        <div>
+                          by {item.uploaded_by_user?.full_name} on{' '}
+                          {dayjs(item.uploaded_at).format('MMM DD, YYYY')}
+                        </div>
                       </div>
                     }
                   />
                 </List.Item>
               )}
-            />
-            <div className="mt-4 flex gap-2">
-              <TextArea
-                placeholder="Add a comment..."
-                value={comment}
-                onChange={(e) => setComment(e.target.value)}
-                onPressEnter={(e) => {
-                  if (!e.shiftKey) {
-                    e.preventDefault();
-                    handleSendComment();
-                  }
-                }}
-                autoSize={{ minRows: 2, maxRows: 4 }}
-              />
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                onClick={handleSendComment}
-                disabled={!comment.trim()}
-                className="bg-accent hover:bg-accent-hover border-none"
-              >
-                Send
-              </Button>
-            </div>
-          </Card>
-        </div>
-
-        <div className="space-y-6">
-          <Card title="Attachments" className="border-border">
-            <div className="space-y-3">
-              {attachments.map((file) => (
-                <div key={file.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                  <div className="flex items-center gap-2 flex-1 min-w-0">
-                    <PaperClipOutlined className="text-muted-foreground flex-shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium text-sm truncate">{file.name}</div>
-                      <div className="text-xs text-muted-foreground">{file.size}</div>
-                    </div>
-                  </div>
-                  <Button type="text" size="small" icon={<DownloadOutlined />} />
-                </div>
-              ))}
-            </div>
-            <Upload className="mt-4">
-              <Button icon={<UploadOutlined />} block>
-                Upload File
-              </Button>
-            </Upload>
-          </Card>
-
-          <Card title="Activity History" className="border-border">
-            <Timeline
-              items={history.map((item) => ({
-                color: item.color,
-                children: (
-                  <div>
-                    <div className="font-medium text-sm">{item.action}</div>
-                    <div className="text-xs text-muted-foreground">
-                      by {item.user}
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {item.timestamp}
-                    </div>
-                  </div>
-                ),
-              }))}
             />
           </Card>
         </div>

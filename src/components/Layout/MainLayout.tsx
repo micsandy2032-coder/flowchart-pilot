@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { Layout, Menu, Badge, Avatar, Dropdown, Button, Space } from 'antd';
 import {
   DashboardOutlined,
@@ -14,14 +14,44 @@ import {
   LogoutOutlined,
   SettingOutlined,
 } from '@ant-design/icons';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import logo from '@/assets/cf-logo.jpg';
 
 const { Header, Sider, Content } = Layout;
 
 export const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
-  const location = useLocation();
+  const [userProfile, setUserProfile] = useState<any>(null);
   const [notifications] = useState(3);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    fetchUserProfile();
+  }, []);
+
+  const fetchUserProfile = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', user.email)
+        .single();
+      setUserProfile(data);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast({
+      title: 'Logged out',
+      description: 'You have been logged out successfully',
+    });
+    navigate('/auth');
+  };
 
   const menuItems = [
     {
@@ -55,12 +85,8 @@ export const MainLayout = () => {
     {
       key: 'profile',
       icon: <UserOutlined />,
-      label: 'Profile',
-    },
-    {
-      key: 'settings',
-      icon: <SettingOutlined />,
-      label: 'Settings',
+      label: userProfile?.full_name || 'User',
+      disabled: true,
     },
     {
       type: 'divider' as const,
@@ -69,7 +95,7 @@ export const MainLayout = () => {
       key: 'logout',
       icon: <LogoutOutlined />,
       label: 'Logout',
-      danger: true,
+      onClick: handleLogout,
     },
   ];
 
@@ -115,10 +141,10 @@ export const MainLayout = () => {
             </Badge>
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-                <Avatar icon={<UserOutlined />} className="bg-accent" />
+                <Avatar src={userProfile?.avatar_url} icon={<UserOutlined />} className="bg-accent" />
                 <div className="hidden md:block">
-                  <div className="text-sm font-medium text-foreground">John Admin</div>
-                  <div className="text-xs text-muted-foreground">Admin</div>
+                  <div className="text-sm font-medium text-foreground">{userProfile?.full_name || 'User'}</div>
+                  <div className="text-xs text-muted-foreground">{userProfile?.role || 'Role'}</div>
                 </div>
               </div>
             </Dropdown>
