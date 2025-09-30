@@ -12,27 +12,47 @@ const Auth = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast({
-        title: 'Success',
-        description: 'Logged in successfully',
-      });
+        toast({
+          title: 'Success',
+          description: 'Account created successfully! You can now log in.',
+        });
+        
+        setIsSignUp(false);
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
 
-      navigate('/');
+        if (error) throw error;
+
+        toast({
+          title: 'Success',
+          description: 'Logged in successfully',
+        });
+
+        navigate('/');
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -51,11 +71,13 @@ const Auth = () => {
           <div className="flex justify-center">
             <img src={cfLogo} alt="Company Logo" className="h-16 w-16 rounded-lg object-cover" />
           </div>
-          <CardTitle className="text-2xl">Welcome Back</CardTitle>
-          <CardDescription>Sign in to access your task management system</CardDescription>
+          <CardTitle className="text-2xl">{isSignUp ? 'Create Account' : 'Welcome Back'}</CardTitle>
+          <CardDescription>
+            {isSignUp ? 'Sign up to get started' : 'Sign in to access your task management system'}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
+          <form onSubmit={handleAuth} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -79,17 +101,29 @@ const Auth = () => {
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing in...' : 'Sign In'}
+              {loading ? (isSignUp ? 'Creating account...' : 'Signing in...') : (isSignUp ? 'Sign Up' : 'Sign In')}
             </Button>
           </form>
-          <div className="mt-6 text-center text-sm text-muted-foreground">
-            <p>Demo Credentials:</p>
-            <p className="font-mono text-xs mt-2">
-              Admin: admin@company.com / admin123<br />
-              Data Collector: collector@company.com / collector123<br />
-              Employee: employee@company.com / employee123
-            </p>
+          <div className="mt-4 text-center">
+            <Button
+              type="button"
+              variant="link"
+              onClick={() => setIsSignUp(!isSignUp)}
+              className="text-sm"
+            >
+              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </Button>
           </div>
+          {!isSignUp && (
+            <div className="mt-4 text-center text-sm text-muted-foreground">
+              <p>Demo Credentials:</p>
+              <p className="font-mono text-xs mt-2">
+                Admin: admin@company.com / admin123<br />
+                Data Collector: collector@company.com / collector123<br />
+                Employee: employee@company.com / employee123
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
