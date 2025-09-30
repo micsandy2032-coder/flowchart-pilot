@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -15,13 +15,31 @@ const CreateTask = () => {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [files, setFiles] = useState<FileList | null>(null);
+  const [taskTemplates, setTaskTemplates] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     priority: 'medium',
     estimated_hours: '',
     due_date: '',
+    template_id: '',
   });
+
+  useEffect(() => {
+    fetchTaskTemplates();
+  }, []);
+
+  const fetchTaskTemplates = async () => {
+    const { data } = await supabase
+      .from('task_templates')
+      .select('*')
+      .eq('is_active', true)
+      .order('name');
+    
+    if (data) {
+      setTaskTemplates(data);
+    }
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -57,11 +75,35 @@ const CreateTask = () => {
           due_date: formData.due_date || null,
           created_by: userProfile.id,
           status: 'not_started' as 'not_started',
+          template_id: formData.template_id || null,
         }])
         .select()
         .single();
 
       if (taskError) throw taskError;
+
+      // Create subtasks from template if template is selected
+      if (formData.template_id) {
+        const { data: subtaskTemplates } = await supabase
+          .from('subtask_templates')
+          .select('*')
+          .eq('task_template_id', formData.template_id)
+          .order('sort_order');
+
+        if (subtaskTemplates && subtaskTemplates.length > 0) {
+          const subtasksToCreate = subtaskTemplates.map(template => ({
+            task_id: task.id,
+            title: template.title,
+            description: template.description,
+            sort_order: template.sort_order,
+            is_done: false,
+          }));
+
+          await supabase
+            .from('subtasks')
+            .insert(subtasksToCreate);
+        }
+      }
 
       // Upload files if any
       if (files && files.length > 0) {
@@ -134,6 +176,26 @@ const CreateTask = () => {
                 placeholder="Enter task description"
                 rows={4}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="template">Task Template (Optional)</Label>
+              <Select
+                value={formData.template_id}
+                onValueChange={(value) => setFormData({ ...formData, template_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">No Template</SelectItem>
+                  {taskTemplates.map((template) => (
+                    <SelectItem key={template.id} value={template.id}>
+                      {template.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -162,6 +162,44 @@ export type Database = {
           },
         ]
       }
+      subtask_templates: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          sort_order: number | null
+          task_template_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          sort_order?: number | null
+          task_template_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          sort_order?: number | null
+          task_template_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subtask_templates_task_template_id_fkey"
+            columns: ["task_template_id"]
+            isOneToOne: false
+            referencedRelation: "task_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subtasks: {
         Row: {
           completed_at: string | null
