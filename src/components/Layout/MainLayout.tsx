@@ -18,13 +18,13 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import logo from '@/assets/cf-logo.jpg';
+import { NotificationDropdown } from '@/components/Notifications/NotificationDropdown';
 
 const { Header, Sider, Content } = Layout;
 
 export const MainLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [notifications] = useState(3);
   const location = useLocation();
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -138,13 +138,7 @@ export const MainLayout = () => {
             className="text-lg"
           />
           <Space size="large">
-            <Badge count={notifications} offset={[-5, 5]}>
-              <Button
-                type="text"
-                icon={<BellOutlined className="text-xl" />}
-                className="flex items-center justify-center"
-              />
-            </Badge>
+            <NotificationDropdown />
             <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
               <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
                 <Avatar src={userProfile?.avatar_url} icon={<UserOutlined />} className="bg-accent" />
