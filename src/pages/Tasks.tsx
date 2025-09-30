@@ -33,10 +33,10 @@ export default function Tasks() {
         .from('tasks')
         .select(`
           *,
-          created_by_user:users!created_by(full_name),
+          created_by_user:users!tasks_created_by_fkey(full_name),
           task_assignments(
             user_id,
-            users(full_name)
+            users!task_assignments_user_id_fkey(full_name)
           )
         `)
         .order('created_at', { ascending: false });
