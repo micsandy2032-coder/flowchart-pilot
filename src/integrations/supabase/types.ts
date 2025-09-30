@@ -562,7 +562,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      setup_demo_auth_users: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
     }
     Enums: {
       pending_reason: "data_missing" | "review" | "clarity_needed"
